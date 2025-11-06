@@ -15,11 +15,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files
+// Serve static files - uploads folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Serve frontend static files from project root (so index.html is served)
-app.use(express.static(path.join(__dirname)));
+// Serve frontend static files from project root
+// This serves all static assets (HTML, CSS, JS, images, etc.)
+app.use(express.static(path.join(__dirname), {
+    index: false // Don't auto-serve index.html, we'll handle it explicitly
+}));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -31,17 +34,19 @@ app.get('/health', (req, res) => {
     res.json({ healthy: true, timestamp: Date.now() });
 });
 
-// Home route - serve frontend index.html if present, otherwise fallback to JSON
+// Home route - serve frontend index.html
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
-    try {
-        return res.sendFile(indexPath);
-    } catch (err) {
-        return res.json({ 
-            message: 'KLHResolve Backend API',
-            version: '1.0.0'
-        });
-    }
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error('Error serving index.html:', err);
+            res.status(500).json({ 
+                message: 'KLHResolve Backend API',
+                version: '1.0.0',
+                error: 'Could not load frontend'
+            });
+        }
+    });
 });
 
 // Error handling middleware
@@ -55,15 +60,19 @@ app.use((err, req, res, next) => {
 });
 
 // SPA-friendly catch-all: if the route looks like an API route, return 404 JSON,
-// otherwise return index.html so client-side routing works when hosted as a single-page app.
-// Fallback handler for non-API routes: serve the SPA index.html
+// otherwise return index.html so client-side routing works
 app.use((req, res) => {
     if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads')) {
         return res.status(404).json({ success: false, message: 'Route not found' });
     }
 
     const indexPath = path.join(__dirname, 'index.html');
-    return res.sendFile(indexPath);
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error('Error serving index.html in catch-all:', err);
+            res.status(404).json({ success: false, message: 'Page not found' });
+        }
+    });
 });
 
 const PORT = process.env.PORT || 5000;
